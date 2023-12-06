@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "fetch_more_data",
+    "java-repos",
+    "pom-aggregator",
+]
+
+[patch.crates-io]
+tokio = { git = "https://github.com/tokio-rs/tokio" }
