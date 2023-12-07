@@ -1,20 +1,20 @@
-use std::fs::File;
-use std::future::Future;
-use std::{backtrace, io};
-use std::backtrace::Backtrace;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{Ordering, AtomicUsize};
-use std::time::Duration;
-use tracing::{error, info, trace, warn};
-use reqwest::{Client, header, Method, RequestBuilder, Response, StatusCode, Url};
+use crate::{Data, Repo};
+use reqwest::{header, Client, Method, RequestBuilder, Response, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
-use crate::{Data, Repo};
+use std::backtrace::Backtrace;
+use std::fs::File;
+use std::future::Future;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
+use std::{backtrace, io};
 use thiserror::Error;
 use tokio::fs;
 use tokio::task::yield_now;
 use tokio::time::sleep;
+use tracing::{error, info, trace, warn};
 
 static USER_AGENT: &str = "rust-repos (https://github.com/rust-ops/rust-repos)";
 
@@ -87,30 +87,34 @@ impl Github {
     }
 
     pub async fn tree(&self, repo: &Repo) -> Result<GithubTree, GithubError> {
-        let resp = self.build_request(Method::GET, format!("repos/{}/git/trees/HEAD?recursive=1", repo.name)).await.send().await?;
-        Ok(handle_response_json(resp).await?)
+        let resp = self
+            .build_request(
+                Method::GET,
+                format!("repos/{}/git/trees/HEAD?recursive=1", repo.name),
+            )
+            .await
+            .send()
+            .await?;
+        handle_response_json(resp).await
     }
 
     pub async fn download_pom(&self, repo: &Repo, path: &str) -> Result<(), GithubError> {
-
         if repo.has_pom && path == "pom.xml" {
             return Ok(());
         }
 
-        let url = format!("https://raw.githubusercontent.com/{}/HEAD/{}", repo.name, path);
+        let url = format!(
+            "https://raw.githubusercontent.com/{}/HEAD/{}",
+            repo.name, path
+        );
 
         let resp = self.build_request(Method::GET, url).await.send().await?;
         let pom = handle_response(resp).await?.bytes().await?;
 
-        let folder_name = repo.name.replace("/", ".");
-        let file = self.data_dir.pom_dir.join(folder_name)
-            .join(path);
+        let folder_name = repo.name.replace('/', ".");
+        let file = self.data_dir.pom_dir.join(folder_name).join(path);
 
-
-        fs::create_dir_all(
-            file.parent()
-                .ok_or_else(|| GithubError::NoParent)?
-        ).await?;
+        fs::create_dir_all(file.parent().ok_or_else(|| GithubError::NoParent)?).await?;
 
         let mut f = File::create(file)?;
         f.write_all(&pom)?;
@@ -119,9 +123,9 @@ impl Github {
     }
 
     pub async fn retry<F, Fu, R>(&self, fun: F) -> Result<R, GithubError>
-        where
-            F: Fn() -> Fu,
-            Fu: Future<Output=Result<R, GithubError>>
+    where
+        F: Fn() -> Fu,
+        Fu: Future<Output = Result<R, GithubError>>,
     {
         loop {
             match fun().await {
@@ -130,21 +134,23 @@ impl Github {
                 Err(err @ GithubError::HttpError(_)) => return Err(err),
                 Err(GithubError::RateLimit(_)) => {
                     let mut wait = false;
-                    self.current_token_index.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                        if old + 1 >= self.tokens.len() {
-                            wait = true;
-                            Some(0)
-                        } else {
-                            Some(old + 1)
-                        }
-                    }).unwrap();
+                    self.current_token_index
+                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
+                            if old + 1 >= self.tokens.len() {
+                                wait = true;
+                                Some(0)
+                            } else {
+                                Some(old + 1)
+                            }
+                        })
+                        .unwrap();
 
                     if wait {
                         warn!("Tokens wrapped around, sleeping for 1 minute");
                         sleep(Duration::from_secs(60)).await;
                     }
                 }
-                err @ Err(_) => return err
+                err @ Err(_) => return err,
             }
             yield_now().await
         }
@@ -160,16 +166,17 @@ async fn handle_response(resp: Response) -> Result<Response, GithubError> {
     let status = resp.status();
     if status.is_success() {
         Ok(resp)
-    } else if status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::UNPROCESSABLE_ENTITY {
+    } else if status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::UNPROCESSABLE_ENTITY
+    {
         warn!("Rate limit hit");
         Err(GithubError::RateLimit(status))
     } else {
         let error: GitHubError = resp.json().await?;
-        if error.message.contains("abuse") || error.message.contains("secondary rate limit") {
-            warn!("Rate limit hit: {}", error.message);
+        if error.message.contains("abuse") || error.message.contains("rate limit") {
+            warn!("Rate limit hit ({}): {}", status.as_u16(), error.message);
             Err(GithubError::RateLimit(status))
         } else {
-            warn!("Http Error: {}", error.message);
+            warn!("Http Error ({}): {}", status.as_u16(), error.message);
             Err(GithubError::HttpError(status))
         }
     }

@@ -1116,7 +1116,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "color-eyre",
+ "csv",
  "dashmap",
+ "rand",
+ "rand_chacha",
  "rayon",
  "serde",
  "serde-xml-rs",

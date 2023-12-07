@@ -27,7 +27,7 @@ pub struct Repo {
 pub struct Data {
     pub data_dir: PathBuf,
     pub pom_dir: PathBuf,
-    pub githuv_csv: PathBuf,
+    pub github_csv: PathBuf,
     pub fetched: PathBuf,
 }
 
@@ -37,7 +37,7 @@ impl Data {
         let data = Data {
             data_dir: data_dir.clone(),
             pom_dir: data_dir.join("poms"),
-            githuv_csv: data_dir.join("github.csv"),
+            github_csv: data_dir.join("github.csv"),
             fetched: data_dir.join("fetched"),
         };
         if !data_dir.exists() {
@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(str::to_string)
         .collect();
 
-    let data = Data::new("./data/poms")?;
+    let data = Data::new("../data/sample10_000")?;
 
     let gh = Arc::new(Github::new(tokens, data.clone()));
 
@@ -78,10 +78,10 @@ pub enum IterateError {
 }
 
 pub async fn iterate(gh: Arc<Github>, data: Data) -> Result<(), IterateError> {
-    let mut reader = csv::Reader::from_path("./data/github.csv").unwrap();
-    let mut js: JoinSet<Result<(), io::Error>> = JoinSet::new();
-
     let data = Arc::new(data);
+
+    let mut reader = csv::Reader::from_path(&data.github_csv).unwrap();
+    let mut js: JoinSet<Result<(), io::Error>> = JoinSet::new();
 
     if !data.fetched.exists() {
         File::create(&data.fetched).await?;

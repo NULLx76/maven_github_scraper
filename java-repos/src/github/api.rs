@@ -170,7 +170,6 @@ impl<'conf> GitHubApi<'conf> {
                 }
             }
 
-
             // Don't slow down if going to next token
             if !self.next_token() {
                 continue;
