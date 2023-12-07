@@ -1,0 +1,34 @@
+[
+    Syntax {
+        source: Error {
+            pos: 1:1,
+            kind: Syntax(
+                "Unexpected characters outside the root element: .",
+            ),
+        },
+    },
+    Syntax {
+        source: Error {
+            pos: 1:1,
+            kind: Syntax(
+                "Unexpected characters outside the root element: #",
+            ),
+        },
+    },
+    Syntax {
+        source: Error {
+            pos: 1:1,
+            kind: Syntax(
+                "Unexpected end of stream: no root element found",
+            ),
+        },
+    },
+    Syntax {
+        source: Error {
+            pos: 27:16,
+            kind: Syntax(
+                "Unexpected closing tag: {http://maven.apache.org/POM/4.0.0}dependencies != {http://maven.apache.org/POM/4.0.0}project",
+            ),
+        },
+    },
+]
