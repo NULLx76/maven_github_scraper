@@ -1,8 +1,9 @@
+use clap::builder::Str;
 use clap::Parser;
 use color_eyre::eyre::{eyre, WrapErr};
 use color_eyre::Result;
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
-use std::collections::HashSet;
+use std::collections::{BinaryHeap, HashSet};
 use std::fs::remove_file;
 use std::io::Stdout;
 use std::path::Path;
@@ -19,6 +20,10 @@ use std::{
 };
 
 use dashmap::DashMap;
+use rand::prelude::SliceRandom;
+use rand::rngs::ThreadRng;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use walkdir::WalkDir;
 
 mod pom;
@@ -26,66 +31,94 @@ use pom::{Pom, Repositories};
 
 #[derive(Parser)]
 struct Args {
-    #[arg(default_value = "../output")]
+    #[arg(default_value = "../data/first1000")]
     path: PathBuf,
 
     /// Build effective pom to analyze
     /// WARNING: Takes much longer
-    #[arg(short, long)]
+    #[arg(long)]
     effective: bool,
+
+    /// Sample N random repos instead of all
+    /// This is seeded
+    #[arg(long)]
+    sample: Option<usize>,
 }
 
 const EFFECTIVE_FILE_NAME: &str = "effective.xml";
+const SEED: [u8; 32] = [42; 32];
 
 fn main() {
     let args = Args::parse();
 
-    // let repos = DashMap::new();
-    // let distros = DashMap::new();
+    if args.effective {
+        println!("Parsing effective poms");
+    }
+
+    let mut rng = ChaCha20Rng::from_seed(SEED);
+
+    let repos: DashMap<String, usize> = DashMap::new();
+    let distros: DashMap<String, usize> = DashMap::new();
     let counter = AtomicUsize::new(0);
-    let dist_repos = AtomicUsize::new(0);
-    let repos = AtomicUsize::new(0);
 
     let now = Instant::now();
 
     let dir = args.path.read_dir().unwrap();
-    dir.par_bridge()
-        .map(|el| -> Result<()> {
-            let dir = el?;
-            let proj = process_folder(dir.path().as_path(), args.effective)?;
-            repos.fetch_add(proj.repos.len(), Ordering::Relaxed);
-            dist_repos.fetch_add(proj.dist_repos.len(), Ordering::Relaxed);
+    let mut projects: Vec<PathBuf> = dir
+        .par_bridge()
+        .filter_map(|d| d.ok().map(|d| d.path()))
+        .collect();
 
-            counter.fetch_add(1, Ordering::Relaxed);
-            Ok(())
-        })
-        .for_each(|res| {
-            if let Err(err) = res {
-                let str = format!("{err:?}");
-                if !str.contains("Maven") {
-                    eprintln!("{str}");
-                }
-            }
-        });
+    projects.shuffle(&mut rng);
+
+    dbg!(projects.len());
+
+    // dir.par_bridge()
+    //     .map(|el| -> Result<()> {
+    //         let dir = el?;
+    //         let proj = process_folder(dir.path().as_path(), args.effective)?;
+    //
+    //         for repo in proj.repos {
+    //             repos.entry(repo).and_modify(|el| *el += 1).or_insert(1);
+    //         }
+    //
+    //         for repo in proj.dist_repos {
+    //             distros.entry(repo).and_modify(|el| *el += 1).or_insert(1);
+    //         }
+    //
+    //         counter.fetch_add(1, Ordering::Relaxed);
+    //         Ok(())
+    //     })
+    //     .for_each(|res| if let Err(err) = res {});
 
     let duration = Instant::now().duration_since(now);
 
-    println!(
-        "Repos {}, Dist Repos {}",
-        repos.load(Ordering::SeqCst),
-        dist_repos.load(Ordering::SeqCst)
-    );
+    let repos_len = repos.len();
+    let distros_len = distros.len();
+    let repos_top = biggest_n(repos, 5);
+    let distros_top = biggest_n(distros, 5);
 
     println!(
         "Took {} seconds to parse {counter:?} POMs",
         duration.as_secs()
     );
+
+    println!("Found {repos_len} repos. Most used repos are {repos_top:#?}");
+    println!("Found {distros_len} distribution repos. Most used repos are {distros_top:#?}");
+}
+
+fn biggest_n(map: DashMap<String, usize>, n: usize) -> Vec<(String, usize)> {
+    let mut top: Vec<(String, usize)> = map.into_iter().collect();
+    top.sort_by(|(_, a), (_, b)| a.cmp(b).reverse());
+    top.truncate(n);
+
+    top
 }
 
 #[derive(Debug, Clone)]
 struct Project {
-    repos: HashSet<String>,
-    dist_repos: HashSet<String>,
+    pub repos: HashSet<String>,
+    pub dist_repos: HashSet<String>,
 }
 
 fn process_folder(path: &Path, build_effective: bool) -> Result<Project> {
