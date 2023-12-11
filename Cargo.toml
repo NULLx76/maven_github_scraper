@@ -4,6 +4,7 @@ members = [
     "fetch_more_data",
     "java-repos",
     "pom-aggregator",
+    "rp"
 ]
 
 [patch.crates-io]
