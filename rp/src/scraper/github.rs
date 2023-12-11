@@ -1,9 +1,10 @@
 use crate::data::Data;
-use crate::{data, Data, Repo};
+use crate::{data, Repo};
 use reqwest::{header, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::borrow::Cow;
 use std::future::Future;
 use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -145,12 +146,12 @@ impl Github {
 
     async fn build_request(&self, method: Method, url: &str) -> RequestBuilder {
         let url = if !url.starts_with("https://") {
-            format!("https://api.github.com/{}", url)
+            Cow::from(format!("https://api.github.com/{}", url))
         } else {
-            url
+            Cow::from(url)
         };
         self.client
-            .request(method, url)
+            .request(method, url.as_ref())
             .header(header::AUTHORIZATION, format!("token {}", self.get_token()))
             .header(header::USER_AGENT, USER_AGENT)
         // .header(header::ACCEPT, "application/vnd.github+json")
@@ -173,26 +174,28 @@ impl Github {
 
         let data: GraphResponse<T> = handle_response_json(resp).await?;
 
-        data.data.ok_or_else(Error::EmptyData)
+        data.data.ok_or_else(|| Error::EmptyData)
     }
 
     pub async fn load_repositories(
         &self,
         node_ids: &[String],
     ) -> Result<Vec<GraphRepository>, Error> {
-        let data: GraphRepositories = self.graphql(
-            GRAPHQL_QUERY_REPOSITORIES,
-            json!({
-                "ids": node_ids,
-            }),
-        )?;
+        let data: GraphRepositories = self
+            .graphql(
+                GRAPHQL_QUERY_REPOSITORIES,
+                json!({
+                    "ids": node_ids,
+                }),
+            )
+            .await?;
 
         assert!(
             data.rate_limit.cost <= 1,
             "load repositories query too costly"
         );
 
-        data.nodes.ok_or_else(Error::EmptyData)
+        Ok(data.nodes.into_iter().filter_map(|el| el).collect())
     }
 
     pub async fn tree(&self, repo: &Repo) -> Result<GithubTree, Error> {
@@ -204,6 +207,8 @@ impl Github {
             .await
             .send()
             .await?;
+
+        todo!()
     }
 
     pub async fn scrape_repositories(
@@ -216,10 +221,11 @@ impl Github {
             .send()
             .await?;
 
-        handle_response_json(resp).await?
+        Ok(handle_response_json(resp).await?)
     }
 
-    pub async fn download_pom(&self, repo: &Repo, path: &str) -> Result<(), Error> {
+    /// path being the path inside the repo
+    pub async fn download_file(&self, repo: &Repo, path: &str) -> Result<(), Error> {
         let file = self.data_dir.get_pom_path(repo, path);
         if file.exists() {
             return Ok(());
