@@ -1,18 +1,13 @@
 use crate::Repo;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
-use std::hash::Hash;
-use std::io;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::{fs, io};
 use thiserror::Error;
-use tokio::fs;
-use tokio::io::BufWriter;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
-use tokio::task::JoinHandle;
+use tokio::task::{spawn_blocking, JoinError};
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -21,17 +16,23 @@ pub struct Data {
     github_csv: PathBuf,
     fetched: PathBuf,
 
-    state_cache: AtomicUsize,
+    state_cache: Arc<AtomicUsize>,
     state_path: PathBuf,
     state_file_lock: Arc<Mutex<()>>,
+
+    csv_lock: Arc<Mutex<()>>,
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("IO Error occurred")]
     IOError(#[from] io::Error),
+    #[error("Serialization")]
+    Serde(#[from] serde_json::Error),
     #[error("invalid path")]
     InvalidPath(String),
+    #[error("error accessing csv file")]
+    Csv(#[from] csv::Error),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,12 +48,12 @@ struct Forges {
 impl Data {
     pub async fn new(base_dir: &Path) -> Result<Self, Error> {
         if !base_dir.exists() {
-            fs::create_dir_all(base_dir).await?;
+            tokio::fs::create_dir_all(base_dir).await?;
         }
         let state_path = base_dir.join("state.json");
-        let state_cache = AtomicUsize::new(0);
+        let state_cache = Arc::new(AtomicUsize::new(0));
         if state_path.exists() {
-            let data = fs::read(&state_path).await?;
+            let data = tokio::fs::read(&state_path).await?;
             let state: State = serde_json::from_slice(&data)?;
             state_cache.store(state.last_id.github, Ordering::SeqCst);
         }
@@ -65,6 +66,7 @@ impl Data {
             state_file_lock: Default::default(),
             state_path,
             state_cache,
+            csv_lock: Arc::new(Mutex::new(())),
         })
     }
 
@@ -77,7 +79,7 @@ impl Data {
         let parent = file_path
             .parent()
             .ok_or_else(|| Error::InvalidPath("No Parent".to_string()))?;
-        fs::create_dir_all(parent).await?;
+        tokio::fs::create_dir_all(parent).await?;
 
         let mut f = File::create(file_path)?;
         f.write_all(bytes)?;
@@ -89,28 +91,58 @@ impl Data {
         Ok(self.state_cache.load(Ordering::SeqCst))
     }
 
-    pub async fn set_last_id(&self, id: usize) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    pub async fn set_last_id(&self, id: usize) -> Result<(), Error> {
         self.state_cache.store(id, Ordering::SeqCst);
 
-        let handle = tokio::task::spawn(async {
-            let guard = self.state_file_lock.lock().unwrap();
+        let lock = self.state_file_lock.clone();
+        let state_path = self.state_path.clone();
+        spawn_blocking(move || -> Result<(), Error> {
+            let guard = lock.lock().unwrap();
 
-            let mut file = BufWriter::new(File::create(&self.state_path)?);
+            let file = File::create(state_path)?;
+            let mut file = BufWriter::new(file);
             serde_json::to_writer_pretty(
                 &mut file,
                 &State {
                     last_id: Forges { github: id },
                 },
             )?;
-            file.write_all(&[b'\n']).await?;
+            file.write_all(&[b'\n'])?;
 
             drop(guard);
 
             Ok(())
-        });
+        })
+        .await
+        .unwrap()?;
 
-        // TODO: Await handle here?
+        Ok(())
+    }
 
-        Ok(handle)
+    pub async fn store_repo(&self, repo: Repo) -> Result<(), Error> {
+        let lock = self.csv_lock.clone();
+        let github_csv = self.github_csv.clone();
+        spawn_blocking(move || -> Result<(), Error> {
+            let guard = lock.lock().unwrap();
+
+            let mut csv = if github_csv.exists() {
+                let file = fs::OpenOptions::new().append(true).open(&github_csv)?;
+                csv::WriterBuilder::new()
+                    .has_headers(false)
+                    .from_writer(file)
+            } else {
+                let file = File::create(&github_csv)?;
+                csv::WriterBuilder::new().from_writer(file)
+            };
+
+            csv.serialize(repo)?;
+
+            drop(guard);
+
+            Ok(())
+        })
+        .await
+        .unwrap()?;
+        Ok(())
     }
 }

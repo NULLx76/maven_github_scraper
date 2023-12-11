@@ -25,5 +25,7 @@ impl Scraper {
         }
     }
 
-    pub fn scrape(&self) -> Result<(), Error> {}
+    pub fn scrape(&self) -> Result<(), Error> {
+        todo!()
+    }
 }
