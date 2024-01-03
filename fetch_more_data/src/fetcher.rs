@@ -30,7 +30,7 @@ pub async fn fetch_all_poms_for(gh: Arc<Github>, repo: &Repo) -> Result<(), Fetc
         let repo = repo.clone();
         // https://github.com/tokio-rs/tokio/pull/6158
         js.spawn(async move {
-            gh.retry(|| async { gh.download_pom(&*repo, &pom.path).await })
+            gh.retry(|| async { gh.download_pom(&repo, &pom.path).await })
                 .await
         });
     }

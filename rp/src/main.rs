@@ -1,16 +1,24 @@
+use crate::data::Data;
+use crate::scraper::Scraper;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
 
-mod analyzer;
+pub mod analyzer;
 mod data;
-mod scraper;
+pub mod scraper;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Repo {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CsvRepo {
+    #[serde(flatten)]
+    pub repo: Repo,
     pub has_pom: bool,
 }
 
@@ -22,12 +30,13 @@ impl Repo {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Get all the java repos from github into a csv file
-    FetchJavaRepos,
-    /// Per repository, download the poms (recursively)
-    DownloadPoms,
-    /// Combination of fetch + download
+    /// Fetch all Java repos from Github and fetch all pom files of them (recursively)
     FetchAndDownload,
+
+    /// Per repository, _only_ download the poms (recursively)
+    /// This uses an already existing csv file
+    DownloadPoms,
+
     /// Analyze the (effective) poms for the repositories
     Analyze {
         /// Create effective poms (~2s per POM)
@@ -59,6 +68,17 @@ async fn main() -> color_eyre::Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    let data = Data::new(cli.data_dir.as_path()).await?;
+
+    match cli.cmd {
+        Commands::FetchAndDownload => {
+            let scraper = Scraper::new(cli.tokens, data.clone());
+            scraper.fetch_and_download().await?;
+        }
+        Commands::DownloadPoms => todo!(),
+        Commands::Analyze { .. } => todo!(),
+    }
 
     Ok(())
 }
