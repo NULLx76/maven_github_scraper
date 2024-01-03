@@ -1,5 +1,6 @@
 use crate::data::Data;
 use crate::{data, Repo};
+use clap::builder::Str;
 use reqwest::{header, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -74,6 +75,15 @@ pub struct GraphRepository {
     pub id: String,
     pub name_with_owner: String,
     pub languages: GraphLanguages,
+}
+
+impl GraphRepository {
+    pub fn to_repo(self) -> Repo {
+        Repo {
+            id: self.id,
+            name: self.name_with_owner,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
