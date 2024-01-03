@@ -1,0 +1,2 @@
+#!/usr/bin/env zsh
+cargo tree --workspace --depth=0 | awk '{ print $1 }' | grep '.'

@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(str::to_string)
         .collect();
 
-    let data = Data::new("../data/sample10_000")?;
+    let data = Data::new("../data/sample40_000")?;
 
     let gh = Arc::new(Github::new(tokens, data.clone()));
 
