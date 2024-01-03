@@ -1,5 +1,8 @@
 [workspace]
 resolver = "2"
+default-members = [
+    "rp"
+]
 members = [
     "fetch_more_data",
     "java-repos",
@@ -7,5 +10,5 @@ members = [
     "rp"
 ]
 
-[patch.crates-io]
-tokio = { git = "https://github.com/tokio-rs/tokio" }
+[profile.release]
+lto = "thin"

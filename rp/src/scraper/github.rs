@@ -182,12 +182,15 @@ impl Github {
         node_ids: &[String],
     ) -> Result<Vec<GraphRepository>, Error> {
         let data: GraphRepositories = self
-            .graphql(
-                GRAPHQL_QUERY_REPOSITORIES,
-                json!({
-                    "ids": node_ids,
-                }),
-            )
+            .retry(|| async {
+                self.graphql(
+                    GRAPHQL_QUERY_REPOSITORIES,
+                    json!({
+                        "ids": node_ids,
+                    }),
+                )
+                .await
+            })
             .await?;
 
         assert!(
@@ -195,35 +198,46 @@ impl Github {
             "load repositories query too costly"
         );
 
-        Ok(data.nodes.into_iter().filter_map(|el| el).collect())
+        Ok(data.nodes.into_iter().flatten().collect())
     }
 
+    /// gets a filetree of a specific github repo
     pub async fn tree(&self, repo: &Repo) -> Result<GithubTree, Error> {
-        let resp = self
-            .build_request(
-                Method::GET,
-                &format!("repos/{}/git/trees/HEAD?recursive=1", repo.name),
-            )
-            .await
-            .send()
-            .await?;
+        self.retry(|| async {
+            let resp = self
+                .build_request(
+                    Method::GET,
+                    &format!("repos/{}/git/trees/HEAD?recursive=1", repo.name),
+                )
+                .await
+                .send()
+                .await?;
 
-        todo!()
+            handle_response_json(resp).await
+        })
+        .await
     }
 
-    pub async fn scrape_repositories(
-        &self,
-        since: usize,
-    ) -> Result<Vec<Option<RestRepository>>, Error> {
-        let resp = self
-            .build_request(Method::GET, &format!("repositories?since={}", since))
-            .await
-            .send()
+    /// scrapes all github repos (paginated)
+    pub async fn scrape_repositories(&self, since: usize) -> Result<Vec<RestRepository>, Error> {
+        // Maybe needs to be a Vec<Option<RestRepository>>
+        let output: Vec<RestRepository> = self
+            .retry(|| async {
+                let resp = self
+                    .build_request(Method::GET, &format!("repositories?since={}", since))
+                    .await
+                    .send()
+                    .await?;
+
+                handle_response_json(resp).await
+            })
             .await?;
 
-        Ok(handle_response_json(resp).await?)
+        Ok(output)
     }
 
+    /// downloads a file from a github repo
+    ///
     /// path being the path inside the repo
     pub async fn download_file(&self, repo: &Repo, path: &str) -> Result<(), Error> {
         let file = self.data_dir.get_pom_path(repo, path);
@@ -236,15 +250,21 @@ impl Github {
             repo.name, path
         );
 
-        let resp = self.build_request(Method::GET, &url).await.send().await?;
-        let pom = handle_response(resp).await?.bytes().await?;
+        let bytes = self
+            .retry(|| async {
+                let resp = self.build_request(Method::GET, &url).await.send().await?;
+                let pom = handle_response(resp).await?.bytes().await?;
+                Ok(pom)
+            })
+            .await?;
 
-        self.data_dir.write_pom(repo, path, &pom).await?;
+        self.data_dir.write_pom(repo, path, &bytes).await?;
 
         Ok(())
     }
 
-    pub async fn retry<F, Fu, R>(&self, fun: F) -> Result<R, Error>
+    /// retry a github api request and rotate tokens to circumvent rate limiting
+    async fn retry<F, Fu, R>(&self, fun: F) -> Result<R, Error>
     where
         F: Fn() -> Fu,
         Fu: Future<Output = Result<R, Error>>,
@@ -279,11 +299,12 @@ impl Github {
     }
 }
 
-pub async fn handle_response_json<T: DeserializeOwned>(resp: Response) -> Result<T, Error> {
+async fn handle_response_json<T: DeserializeOwned>(resp: Response) -> Result<T, Error> {
     let res = handle_response(resp).await?.json().await?;
     Ok(res)
 }
 
+/// Converts github responses into the correct error codes (helper for the retry function)
 async fn handle_response(resp: Response) -> Result<Response, Error> {
     let status = resp.status();
     if status.is_success() {

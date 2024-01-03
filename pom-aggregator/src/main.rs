@@ -37,7 +37,7 @@ use pom::{Pom, Repositories};
 
 #[derive(Parser)]
 struct Args {
-    #[arg(default_value = "../data/sample10_000")]
+    #[arg(default_value = "../data/latest/data")]
     path: PathBuf,
 
     /// Build effective pom to analyze
@@ -94,13 +94,13 @@ pub fn create_sample_dir(
 }
 
 fn main() {
-    // create_sample_dir(
-    //     "/home/vivian/src/research_project/data/latest/data",
-    //     "/home/vivian/src/research_project/data/sample10_000",
-    //     10_000,
-    //     SEED,
-    // );
-    // return;
+    create_sample_dir(
+        "/home/vivian/src/research_project/data/latest/data",
+        "/home/vivian/src/research_project/data/sample40_000",
+        40_000,
+        SEED,
+    );
+    return;
 
     let args = Args::parse();
 
