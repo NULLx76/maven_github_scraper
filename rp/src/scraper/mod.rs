@@ -1,6 +1,6 @@
 use crate::data::Data;
 use crate::scraper::github::Github;
-use crate::{data, Repo};
+use crate::{data, CsvRepo, Repo};
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
@@ -70,6 +70,7 @@ impl Scraper {
             res.unwrap()?;
         }
 
+        self.data.mark_fetched(repo).await?;
         info!("Fetched files for {}", &repo.name);
 
         Ok(has_file)
@@ -94,6 +95,17 @@ impl Scraper {
 
                 self.data.store_repo(repo.to_csv_repo(has_files)).await?;
             }
+        }
+
+        Ok(())
+    }
+
+    pub async fn download_files(&self) -> Result<(), Error> {
+        let repos = self.data.get_non_fetched_repos().await?;
+
+        for repo in repos {
+            self.fetch_all_files_for(&repo.into(), String::from("pom.xml"))
+                .await?;
         }
 
         Ok(())

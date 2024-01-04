@@ -25,6 +25,15 @@ pub struct CsvRepo {
     pub has_pom: bool,
 }
 
+impl Into<Repo> for CsvRepo {
+    fn into(self) -> Repo {
+        Repo {
+            id: self.id,
+            name: self.name,
+        }
+    }
+}
+
 impl Repo {
     pub fn path(&self) -> String {
         self.name.replace('/', ".")
@@ -44,7 +53,7 @@ enum Commands {
     /// Fetch all Java repos from Github and fetch all pom files of them (recursively)
     FetchAndDownload,
 
-    /// Per repository, _only_ download the poms (recursively)
+    /// Per repository, only download the poms (recursively)
     /// This uses an already existing csv file
     DownloadPoms,
 
@@ -91,7 +100,10 @@ async fn main() -> color_eyre::Result<()> {
             let scraper = Scraper::new(cli.tokens, data.clone());
             scraper.fetch_and_download().await?;
         }
-        Commands::DownloadPoms => todo!(),
+        Commands::DownloadPoms => {
+            let scraper = Scraper::new(cli.tokens, data.clone());
+            scraper.download_files().await?;
+        }
         Commands::Analyze { .. } => todo!(),
     }
 

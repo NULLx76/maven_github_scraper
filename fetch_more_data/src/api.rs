@@ -49,7 +49,7 @@ pub enum GithubError {
     Reqwest(#[from] reqwest::Error),
     #[error("rate limit hit")]
     RateLimit(StatusCode),
-    #[error("other http error")]
+    #[error("other http error: {0}")]
     HttpError(StatusCode),
 
     #[error("Could not get parent pom path")]

@@ -34,7 +34,7 @@ use crate::data;
 const WANTED_LANG: &str = "Java";
 
 fn load_thread(api: &GitHubApi, data: &Data, to_load: Vec<String>) -> Fallible<()> {
-    debug!(
+    info!(
         "collected {} non-fork repositories, loading them",
         to_load.len()
     );
@@ -102,7 +102,7 @@ pub fn scrape(data: &Data, config: &Config, should_stop: &AtomicBool) -> Fallibl
 
             let start = Instant::now();
 
-            debug!("scraping 100 repositories from the REST API");
+            info!("scraping 100 repositories from the REST API");
 
             // Load all the non-fork repositories in the to_load vector
             let mut repos = gh.scrape_repositories(last_id)?;

@@ -77,7 +77,7 @@ fn app() -> Fallible<()> {
     // Ensure the data directory exists
     let data_dir = PathBuf::from(&args[0]);
     if !data_dir.is_dir() {
-        debug!(
+        info!(
             "created missing data directory: {}",
             data_dir.to_string_lossy()
         );

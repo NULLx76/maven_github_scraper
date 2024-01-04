@@ -128,7 +128,7 @@ impl<'conf> GitHubApi<'conf> {
 
         loop {
             let concurrent = self.concurrent_requests.fetch_add(1, Ordering::SeqCst);
-            debug!(
+            info!(
                 "currently making {} concurrent requests to the GitHub API",
                 concurrent + 1
             );
@@ -224,7 +224,7 @@ impl<'conf> GitHubApi<'conf> {
                     for error in errors {
                         if let Some(ref type_) = error.type_ {
                             if type_ == "NOT_FOUND" {
-                                debug!("ignored GraphQL error: {}", error.message);
+                                warn!("ignored GraphQL error: {}", error.message);
                                 continue;
                             }
                         }
