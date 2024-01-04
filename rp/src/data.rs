@@ -1,6 +1,9 @@
+use crate::data::Error::InvalidPath;
 use crate::{CsvRepo, Repo};
+use csv::{Reader, ReaderBuilder};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
+use std::collections::HashSet;
+use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -57,10 +60,15 @@ impl Data {
             state_cache.store(state.last_id.github, Ordering::SeqCst);
         }
 
+        let fetched = base_dir.join("fetched");
+        if !fetched.exists() {
+            tokio::fs::File::create(&fetched).await?;
+        }
+
         Ok(Self {
             pom_dir: base_dir.join("poms"),
             github_csv: base_dir.join("github.csv"),
-            fetched: base_dir.join("fetched"),
+            fetched,
             state_file_lock: Default::default(),
             state_path,
             state_cache,
@@ -124,13 +132,15 @@ impl Data {
             let guard = lock.lock().unwrap();
 
             let mut csv = if github_csv.exists() {
-                let file = fs::OpenOptions::new().append(true).open(&github_csv)?;
+                let file = OpenOptions::new().append(true).open(&github_csv)?;
                 csv::WriterBuilder::new()
                     .has_headers(false)
                     .from_writer(file)
             } else {
                 let file = File::create(&github_csv)?;
-                csv::WriterBuilder::new().from_writer(file)
+                csv::WriterBuilder::new()
+                    .has_headers(true)
+                    .from_writer(file)
             };
 
             csv.serialize(repo)?;
@@ -142,5 +152,42 @@ impl Data {
         .await
         .unwrap()?;
         Ok(())
+    }
+
+    pub async fn get_non_fetched_repos(&self) -> Result<Vec<CsvRepo>, Error> {
+        let fetched = self.fetched.clone();
+        let github_csv = self.github_csv.clone();
+        spawn_blocking(move || -> Result<Vec<CsvRepo>, Error> {
+            let done_str = fs::read_to_string(fetched)?;
+            let done: HashSet<_> = done_str.lines().collect();
+
+            let mut rdr = csv::Reader::from_path(github_csv)?;
+            let mut repos = Vec::new();
+
+            for record in rdr.deserialize() {
+                let record: CsvRepo = record?;
+                if !done.contains(record.id.as_str()) {
+                    repos.push(record);
+                }
+            }
+
+            Ok(repos)
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn mark_fetched(&self, repo: &Repo) -> Result<(), Error> {
+        let fetched = self.fetched.clone();
+        let id = repo.id.clone();
+        spawn_blocking(move || -> Result<(), Error> {
+            let mut f = OpenOptions::new().append(true).open(&fetched)?;
+            f.write_all(id.as_bytes())?;
+            f.write_all("\n".as_bytes())?;
+
+            Ok(())
+        })
+        .await
+        .unwrap()
     }
 }
