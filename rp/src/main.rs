@@ -1,6 +1,5 @@
 use crate::data::Data;
 use crate::scraper::Scraper;
-use clap::builder::Str;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::bail;
 use serde::{Deserialize, Serialize};
@@ -25,11 +24,11 @@ pub struct CsvRepo {
     pub has_pom: bool,
 }
 
-impl Into<Repo> for CsvRepo {
-    fn into(self) -> Repo {
+impl From<CsvRepo> for Repo {
+    fn from(value: CsvRepo) -> Self {
         Repo {
-            id: self.id,
-            name: self.name,
+            id: value.id,
+            name: value.name,
         }
     }
 }

@@ -1,6 +1,4 @@
-use crate::data::Error::InvalidPath;
 use crate::{CsvRepo, Repo};
-use csv::{Reader, ReaderBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
@@ -11,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::{fs, io};
 use thiserror::Error;
 use tokio::task::spawn_blocking;
+use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -28,7 +27,7 @@ pub struct Data {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("IO Error occurred")]
-    IOError(#[from] io::Error),
+    IO(#[from] io::Error),
     #[error("Serialization")]
     Serde(#[from] serde_json::Error),
     #[error("invalid path")]

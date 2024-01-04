@@ -1,7 +1,6 @@
 use crate::data::Data;
 use crate::scraper::github::Github;
 use crate::{data, CsvRepo, Repo};
-use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
