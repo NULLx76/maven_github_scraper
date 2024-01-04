@@ -59,6 +59,7 @@ enum Commands {
     /// Analyze the (effective) poms for the repositories
     Analyze {
         /// Create effective poms (~2s per POM)
+        #[arg(long)]
         effective: bool,
     },
 }
@@ -103,7 +104,10 @@ async fn main() -> color_eyre::Result<()> {
             let scraper = Scraper::new(cli.tokens, data.clone());
             scraper.download_files().await?;
         }
-        Commands::Analyze { .. } => todo!(),
+        Commands::Analyze { effective } => {
+            let report = analyzer::analyze(data, effective).await?;
+            report.print();
+        }
     }
 
     Ok(())
