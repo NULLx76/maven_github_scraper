@@ -1,4 +1,5 @@
 use crate::{CsvRepo, Repo};
+use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
@@ -9,7 +10,6 @@ use std::sync::{Arc, Mutex};
 use std::{fs, io};
 use thiserror::Error;
 use tokio::task::spawn_blocking;
-use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -188,5 +188,23 @@ impl Data {
         })
         .await
         .unwrap()
+    }
+
+    pub async fn get_project_dirs(&self) -> Result<Vec<PathBuf>, Error> {
+        let dir = self.pom_dir.read_dir()?;
+        let (send, recv) = tokio::sync::oneshot::channel();
+
+        rayon::spawn(move || {
+            let projects = dir
+                .par_bridge()
+                .filter_map(|d| d.ok().map(|d| d.path()))
+                .collect();
+
+            send.send(projects).unwrap();
+        });
+
+        let projects = recv.await.expect("Rayon panicked");
+
+        Ok(projects)
     }
 }
