@@ -1,6 +1,8 @@
 use crate::data::Data;
 use crate::scraper::Scraper;
+use clap::builder::Str;
 use clap::{Parser, Subcommand};
+use color_eyre::eyre::bail;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -17,14 +19,23 @@ pub struct Repo {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CsvRepo {
-    #[serde(flatten)]
-    pub repo: Repo,
+    // Can't use serde(flatten) due to https://github.com/BurntSushi/rust-csv/issues/188
+    pub id: String,
+    pub name: String,
     pub has_pom: bool,
 }
 
 impl Repo {
     pub fn path(&self) -> String {
         self.name.replace('/', ".")
+    }
+
+    pub fn to_csv_repo(self, has_pom: bool) -> CsvRepo {
+        CsvRepo {
+            id: self.id,
+            name: self.name,
+            has_pom,
+        }
     }
 }
 
@@ -51,7 +62,7 @@ struct Cli {
     data_dir: PathBuf,
 
     /// Github tokens to use when fetching from GitHub
-    #[arg(env, hide_env_values = true)]
+    #[arg(env = "GH_TOKENS", hide_env_values = true)]
     tokens: Vec<String>,
 
     #[command(subcommand)]
@@ -68,6 +79,10 @@ async fn main() -> color_eyre::Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    if cli.tokens.is_empty() {
+        bail!("Please provide Github Tokens");
+    }
 
     let data = Data::new(cli.data_dir.as_path()).await?;
 

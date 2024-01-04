@@ -1,15 +1,16 @@
 use crate::data::Data;
-use crate::scraper::github::{Github, GraphRepository};
+use crate::scraper::github::Github;
 use crate::{data, Repo};
+use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
+use tokio::signal::ctrl_c;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 pub mod github;
 
@@ -31,16 +32,24 @@ pub enum Error {
 impl Scraper {
     pub fn new(gh_tokens: Vec<String>, data: Data) -> Self {
         let gh = Github::new(gh_tokens, data.clone());
+        let finished = Arc::new(AtomicBool::new(false));
+        let f2 = finished.clone();
+
+        tokio::spawn(async move {
+            ctrl_c().await.expect("Failed to install Ctrl+C Handler");
+            warn!("Ctrl+C received, stopping...");
+            f2.store(true, SeqCst);
+        });
 
         Self {
             gh: Arc::new(gh),
             data,
-            finished: Arc::new(AtomicBool::new(false)),
+            finished,
         }
     }
 
-    async fn fetch_all_files_for(&self, repo: Repo, file: String) -> Result<bool, Error> {
-        let tree = self.gh.tree(&repo).await?;
+    async fn fetch_all_files_for(&self, repo: &Repo, file: String) -> Result<bool, Error> {
+        let tree = self.gh.tree(repo).await?;
         let mut js = JoinSet::new();
 
         let mut has_file = false;
@@ -67,7 +76,7 @@ impl Scraper {
     }
 
     async fn load_repositories(&self, repos: Vec<String>) -> Result<(), Error> {
-        debug!("Loading {} repos", repos.len());
+        info!("Loading {} repos", repos.len());
 
         let mut graph_repos = self.gh.load_repositories(&repos).await?;
         for repo in graph_repos.drain(..) {
@@ -78,8 +87,12 @@ impl Scraper {
                 .filter_map(Option::as_ref)
                 .any(|el| el.name == "Java")
             {
-                self.fetch_all_files_for(repo.to_repo(), String::from("pom.xml"))
+                let repo = repo.to_repo();
+                let has_files = self
+                    .fetch_all_files_for(&repo, String::from("pom.xml"))
                     .await?;
+
+                self.data.store_repo(repo.to_csv_repo(has_files)).await?;
             }
         }
 
@@ -115,6 +128,8 @@ impl Scraper {
                 };
             }
 
+            self.data.set_last_id(last_id).await.unwrap();
+
             while let Some(res) = js.join_next().await {
                 let res = res.unwrap();
                 if let Err(e) = res {
@@ -130,10 +145,12 @@ impl Scraper {
                 break;
             }
 
-            if let Some(time) = Duration::from_secs(1).checked_sub(start_loop.elapsed()) {
+            if let Some(time) = Duration::from_millis(250).checked_sub(start_loop.elapsed()) {
                 sleep(time).await;
             }
         }
+
+        info!("Took {} seconds", start.elapsed().as_secs());
 
         Ok(())
     }
