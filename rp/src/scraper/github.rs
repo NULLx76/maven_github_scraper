@@ -1,6 +1,5 @@
 use crate::data::Data;
 use crate::{data, Repo};
-use clap::builder::Str;
 use reqwest::{header, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -105,12 +104,12 @@ pub struct GraphRef {
 pub enum Error {
     #[error("reqwest error occurred {0:?}")]
     Reqwest(#[from] reqwest::Error),
-    #[error("rate limit hit")]
+    #[error("rate limit hit {0}")]
     RateLimit(StatusCode),
-    #[error("other http error")]
+    #[error("other http error: {0}")]
     HttpError(StatusCode),
 
-    #[error("Data error occurred")]
+    #[error("Data error occurred: {0:?}")]
     DataError(#[from] data::Error),
 
     #[error("Response did not contain requested data")]
@@ -211,7 +210,7 @@ impl Github {
         Ok(data.nodes.into_iter().flatten().collect())
     }
 
-    /// gets a filetree of a specific github repo
+    /// gets a file tree of a specific github repo
     pub async fn tree(&self, repo: &Repo) -> Result<GithubTree, Error> {
         self.retry(|| async {
             let resp = self
@@ -273,6 +272,7 @@ impl Github {
         Ok(())
     }
 
+    //noinspection DuplicatedCode
     /// retry a github api request and rotate tokens to circumvent rate limiting
     async fn retry<F, Fu, R>(&self, fun: F) -> Result<R, Error>
     where

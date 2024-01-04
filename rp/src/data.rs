@@ -1,4 +1,4 @@
-use crate::Repo;
+use crate::{CsvRepo, Repo};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -7,11 +7,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
 use thiserror::Error;
-use tokio::task::{spawn_blocking, JoinError};
+use tokio::task::spawn_blocking;
 
 #[derive(Debug, Clone)]
 pub struct Data {
-    data_dir: PathBuf,
     pom_dir: PathBuf,
     github_csv: PathBuf,
     fetched: PathBuf,
@@ -59,7 +58,6 @@ impl Data {
         }
 
         Ok(Self {
-            data_dir: base_dir.to_path_buf(),
             pom_dir: base_dir.join("poms"),
             github_csv: base_dir.join("github.csv"),
             fetched: base_dir.join("fetched"),
@@ -119,7 +117,7 @@ impl Data {
         Ok(())
     }
 
-    pub async fn store_repo(&self, repo: Repo) -> Result<(), Error> {
+    pub async fn store_repo(&self, repo: CsvRepo) -> Result<(), Error> {
         let lock = self.csv_lock.clone();
         let github_csv = self.github_csv.clone();
         spawn_blocking(move || -> Result<(), Error> {
