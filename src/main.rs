@@ -2,6 +2,10 @@ use crate::data::Data;
 use crate::scraper::Scraper;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::bail;
+use rand::prelude::SliceRandom;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -62,6 +66,11 @@ enum Commands {
         #[arg(long)]
         effective: bool,
     },
+    CreateRandomSubset {
+        n: usize,
+        from: PathBuf,
+        out: PathBuf,
+    },
 }
 
 #[derive(Parser)]
@@ -76,6 +85,28 @@ struct Cli {
 
     #[command(subcommand)]
     cmd: Commands,
+}
+
+const SEED: [u8; 32] = [42; 32];
+
+pub fn create_subset(n: usize, from: PathBuf, out: PathBuf) -> color_eyre::Result<()> {
+    let mut rng = ChaCha20Rng::from_seed(SEED);
+
+    let pom_dir = from.read_dir()?;
+
+    let mut projects: Vec<PathBuf> = pom_dir
+        .par_bridge()
+        .filter_map(|d| d.ok().map(|d| d.path()))
+        .collect();
+
+    projects.shuffle(&mut rng);
+
+    todo!();
+    // Create output dir
+    // Create fake CSV in output dir
+    // Copy over 'fetched' file if it exists
+
+    Ok(())
 }
 
 #[tokio::main]
