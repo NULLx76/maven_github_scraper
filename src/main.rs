@@ -7,8 +7,10 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::{fs, os};
 
 pub mod analyzer;
 mod data;
@@ -92,19 +94,32 @@ const SEED: [u8; 32] = [42; 32];
 pub fn create_subset(n: usize, from: PathBuf, out: PathBuf) -> color_eyre::Result<()> {
     let mut rng = ChaCha20Rng::from_seed(SEED);
 
-    let pom_dir = from.read_dir()?;
+    let mut reader = csv::Reader::from_path(from.join("github.csv")).unwrap();
 
-    let mut projects: Vec<PathBuf> = pom_dir
-        .par_bridge()
-        .filter_map(|d| d.ok().map(|d| d.path()))
-        .collect();
+    let mut repos: Vec<Repo> = reader.deserialize().map(|el| el.unwrap()).collect();
 
-    projects.shuffle(&mut rng);
+    repos.shuffle(&mut rng);
 
-    todo!();
-    // Create output dir
-    // Create fake CSV in output dir
-    // Copy over 'fetched' file if it exists
+    repos.truncate(n);
+
+    fs::create_dir_all(&out.join("poms"))?;
+
+    fs::copy(from.join("fetched"), out.join("fetched"))?;
+
+    let mut writer = csv::Writer::from_path(out.join("github.csv")).unwrap();
+    for repo in repos {
+        let repo_path = repo.name.replace('/', ".");
+        let path = from.join("poms").join(&repo_path);
+
+        if path.exists() {
+            symlink(
+                path.canonicalize().unwrap(),
+                out.join("poms").join(&repo_path),
+            )
+            .unwrap();
+        }
+        writer.serialize(&repo).unwrap();
+    }
 
     Ok(())
 }
@@ -138,6 +153,9 @@ async fn main() -> color_eyre::Result<()> {
         Commands::Analyze { effective } => {
             let report = analyzer::analyze(data, effective).await?;
             report.print();
+        }
+        Commands::CreateRandomSubset { n, from, out } => {
+            create_subset(n, from, out)?;
         }
     }
 
