@@ -47,6 +47,39 @@ impl Scraper {
         }
     }
 
+    async fn has_github_releases(&self, repo: &Repo) -> Result<bool, Error> {
+        let res = self.gh.has_github_releases(repo).await?;
+        todo!("write to file somewhere")
+    }
+
+    async fn fetch_workflow_files(&self, repo: &Repo) -> Result<bool, Error> {
+        todo!("untested");
+        let tree = self.gh.tree(repo).await?;
+        let mut js = JoinSet::new();
+
+        let mut has_file = false;
+
+        for f in tree.tree.into_iter().filter(|node| {
+            node.path.starts_with(".github/workflows")
+                && (node.path.ends_with(".yml") || node.path.ends_with(".yaml"))
+        }) {
+            has_file = true;
+            let gh = self.gh.clone();
+            let repo = repo.clone();
+
+            js.spawn(async move { gh.download_file(&repo, &f.path).await });
+        }
+
+        while let Some(res) = js.join_next().await {
+            res.unwrap()?;
+        }
+
+        self.data.mark_fetched(repo).await?;
+        info!("Fetched files for {}", &repo.name);
+
+        Ok(has_file)
+    }
+
     async fn fetch_all_files_for(&self, repo: &Repo, file: String) -> Result<bool, Error> {
         let tree = self.gh.tree(repo).await?;
         let mut js = JoinSet::new();

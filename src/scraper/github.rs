@@ -3,7 +3,7 @@ use crate::{data, Repo};
 use reqwest::{header, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::future::Future;
 use std::io;
@@ -270,6 +270,23 @@ impl Github {
         self.data_dir.write_pom(repo, path, &bytes).await?;
 
         Ok(())
+    }
+
+    pub async fn has_github_releases(&self, repo: &Repo) -> Result<bool, Error> {
+        let releases: Vec<Value> = self
+            .retry(|| async {
+                let resp = self
+                    .build_request(Method::GET, &format!("repos/{}/releases", repo.name))
+                    .await
+                    .send()
+                    .await?;
+                let resp = handle_response_json(resp).await?;
+
+                Ok(resp)
+            })
+            .await?;
+
+        Ok(!releases.is_empty())
     }
 
     //noinspection DuplicatedCode
