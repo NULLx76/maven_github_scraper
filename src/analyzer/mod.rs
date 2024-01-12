@@ -113,6 +113,8 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
     let projects = data.get_project_dirs().await?;
     let (send, recv) = tokio::sync::oneshot::channel();
 
+    todo!("add report of the repos that do release, to check later if they have workflows and gh releases");
+
     rayon::spawn(move || {
         let distros: DashMap<String, usize> = DashMap::new();
         let repos: DashMap<String, usize> = DashMap::new();
