@@ -1,15 +1,20 @@
 use crate::{CsvRepo, Repo};
+use color_eyre::eyre::Context;
+use indicatif::ProgressBar;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
 use thiserror::Error;
 use tokio::task::spawn_blocking;
+use tracing::info;
 
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -188,6 +193,58 @@ impl Data {
         })
         .await
         .unwrap()
+    }
+
+    pub async fn update_csv_has_pom(&self) -> Result<(), Error> {
+        info!("Updating csv from filesystem");
+        let csv = self.github_csv.clone();
+        let mut new_csv = self.github_csv.clone();
+        new_csv.set_extension("csv.new");
+        if new_csv.exists() {
+            tokio::fs::remove_file(&new_csv).await?;
+        }
+        let dirs: HashSet<String> = self
+            .get_project_dirs()
+            .await?
+            .into_iter()
+            .map(|el| el.to_string_lossy().to_string())
+            .collect();
+
+        let spinner = ProgressBar::new(dirs.len() as u64);
+
+        info!("Fetched all dirs");
+
+        let new_path = new_csv.clone();
+        spawn_blocking(move || -> Result<(), Error> {
+            let mut rdr = csv::Reader::from_path(&csv)?;
+            let mut wtr = csv::WriterBuilder::new()
+                .has_headers(true)
+                .from_path(new_path)?;
+
+            for record in rdr.deserialize() {
+                spinner.tick();
+                let mut csv_record: CsvRepo = record?;
+                let path = csv_record.name.replace('/', ".");
+                csv_record.has_pom = csv_record.has_pom || dirs.contains(&path);
+                if csv_record.has_pom {
+                    spinner.inc(1);
+                }
+
+                wtr.serialize(csv_record)?;
+            }
+
+            spinner.finish();
+
+            Ok(())
+        })
+        .await
+        .unwrap()?;
+
+        tokio::fs::rename(new_csv, &self.github_csv).await?;
+
+        info!("consolidated CSV successfully");
+
+        Ok(())
     }
 
     pub async fn get_project_dirs(&self) -> Result<Vec<PathBuf>, Error> {
