@@ -339,8 +339,8 @@ async fn handle_response(resp: Response) -> Result<Response, Error> {
     {
         warn!("Rate limit hit");
         Err(Error::RateLimit(status))
-    } else {
-        let error: GitHubError = resp.json().await?;
+    } else if let Ok(error) = resp.json().await {
+        let error: GitHubError = error;
         if error.message.contains("abuse") || error.message.contains("rate limit") {
             warn!("Rate limit hit ({}): {}", status.as_u16(), error.message);
             Err(Error::RateLimit(status))
@@ -348,5 +348,7 @@ async fn handle_response(resp: Response) -> Result<Response, Error> {
             warn!("Http Error ({}): {}", status.as_u16(), error.message);
             Err(Error::HttpError(status))
         }
+    } else {
+        Err(Error::HttpError(status))
     }
 }
