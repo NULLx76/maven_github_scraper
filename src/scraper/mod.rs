@@ -1,5 +1,5 @@
 use crate::data::Data;
-use crate::scraper::github::Github;
+use crate::scraper::github::{Github, GithubTree};
 use crate::{data, CsvRepo, Repo};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
@@ -81,7 +81,14 @@ impl Scraper {
     }
 
     async fn fetch_all_files_for(&self, repo: &Repo, file: String) -> Result<bool, Error> {
-        let tree = self.gh.tree(repo).await?;
+        let tree = match self.gh.tree(repo).await {
+            Ok(el) => el,
+            Err(github::Error::HttpError(code)) => {
+                warn!("HTTP Error occurred {code}");
+                return Ok(false);
+            }
+            e @ Err(_) => e?,
+        };
         let mut js = JoinSet::new();
 
         let mut has_file = false;
