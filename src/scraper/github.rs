@@ -289,7 +289,6 @@ impl Github {
         Ok(!releases.is_empty())
     }
 
-    //noinspection DuplicatedCode
     /// retry a github api request and rotate tokens to circumvent rate limiting
     async fn retry<F, Fu, R>(&self, fun: F) -> Result<R, Error>
     where

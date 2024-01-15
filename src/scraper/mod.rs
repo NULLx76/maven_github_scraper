@@ -99,7 +99,14 @@ impl Scraper {
         }
 
         while let Some(res) = js.join_next().await {
-            res.unwrap()?;
+            if let Err(e) = res.unwrap() {
+                match e {
+                    github::Error::HttpError(code) if code.as_u16() == 404 => {
+                        warn!("HTTP 404 occurred")
+                    }
+                    e => return Err(e.into()),
+                }
+            }
         }
 
         self.data.mark_fetched(repo).await?;
