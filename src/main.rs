@@ -89,7 +89,7 @@ struct Cli {
     data_dir: PathBuf,
 
     /// Github tokens to use when fetching from GitHub
-    #[arg(env = "GH_TOKENS", hide_env_values = true)]
+    #[arg(env = "GH_TOKENS", hide_env_values = true, num_args = 1.., value_delimiter = ',')]
     tokens: Vec<String>,
 
     #[command(subcommand)]
@@ -144,6 +144,7 @@ async fn main() -> color_eyre::Result<()> {
     if cli.tokens.is_empty() {
         bail!("Please provide Github Tokens");
     }
+    dbg!(&cli.tokens);
 
     let data = Data::new(cli.data_dir.as_path()).await?;
 
