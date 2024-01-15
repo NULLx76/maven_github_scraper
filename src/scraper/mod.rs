@@ -1,6 +1,7 @@
 use crate::data::Data;
 use crate::scraper::github::{Github, GithubTree};
 use crate::{data, CsvRepo, Repo};
+use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
@@ -150,6 +151,9 @@ impl Scraper {
         let repos = self.data.get_non_fetched_repos().await?;
 
         for repo in repos {
+            if self.finished.load(SeqCst) {
+                break;
+            }
             self.fetch_all_files_for(&repo.into(), String::from("pom.xml"))
                 .await?;
         }
