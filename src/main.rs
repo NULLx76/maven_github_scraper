@@ -98,7 +98,7 @@ pub fn create_subset(n: usize, from: PathBuf, out: PathBuf) -> color_eyre::Resul
 
     let mut reader = csv::Reader::from_path(from.join("github.csv")).unwrap();
 
-    let mut repos: Vec<Repo> = reader.deserialize().map(|el| el.unwrap()).collect();
+    let mut repos: Vec<CsvRepo> = reader.deserialize().map(|el| el.unwrap()).collect();
 
     repos.shuffle(&mut rng);
 
