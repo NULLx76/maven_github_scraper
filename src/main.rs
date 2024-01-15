@@ -106,20 +106,21 @@ pub fn create_subset(n: usize, from: PathBuf, out: PathBuf) -> color_eyre::Resul
 
     fs::create_dir_all(out.join("poms"))?;
 
-    fs::copy(from.join("fetched"), out.join("fetched"))?;
+    let fetched = from.join("fetched");
+
+    if fetched.exists() {
+        fs::copy(fetched, out.join("fetched"))?;
+    }
 
     let mut writer = csv::Writer::from_path(out.join("github.csv")).unwrap();
     for repo in repos {
         let repo_path = repo.name.replace('/', ".");
-        let path = from.join("poms").join(&repo_path);
-
-        if path.exists() {
-            symlink(
-                path.canonicalize().unwrap(),
-                out.join("poms").join(&repo_path),
-            )
-            .unwrap();
+        if let Ok(path) = from.join("poms").join(&repo_path).canonicalize() {
+            if path.exists() {
+                symlink(path, out.join("poms").join(&repo_path))?;
+            }
         }
+
         writer.serialize(&repo).unwrap();
     }
 
