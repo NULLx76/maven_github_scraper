@@ -3,7 +3,7 @@ use crate::data::Data;
 use color_eyre::eyre::{eyre, WrapErr};
 use dashmap::DashMap;
 use rayon::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -73,18 +73,18 @@ fn biggest_n(map: DashMap<String, usize>, n: usize) -> Vec<(String, usize)> {
     top
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Report {
     pub distros: DashMap<String, usize>,
-    pub repos: DashMap<String, usize>,
+    pub external_repos: DashMap<String, usize>,
     pub has_external_repos: usize,
-    pub has_distro_repos: usize,
+    pub has_distro_repos: Vec<String>,
     pub errors: Vec<String>,
     pub total: usize,
 }
 
 impl Report {
-    pub fn print(self) {
+    pub fn print(&self) {
         println!("Found a total of {} repos", self.total);
         println!(
             "Amount of repos with external repos: {}",
@@ -92,13 +92,13 @@ impl Report {
         );
         println!(
             "Amount of repos with distribution repos: {}",
-            self.has_distro_repos
+            self.has_distro_repos.len()
         );
 
-        let repos_len = self.repos.len();
+        let repos_len = self.external_repos.len();
         let distros_len = self.distros.len();
-        let top_repos = biggest_n(self.repos, 25);
-        let top_distros = biggest_n(self.distros, 25);
+        let top_repos = biggest_n(self.external_repos.clone(), 25);
+        let top_distros = biggest_n(self.distros.clone(), 25);
 
         println!("Found {repos_len} distinct external repositories, top 25: {top_repos:#?}");
         println!(
@@ -113,13 +113,11 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
     let projects = data.get_project_dirs().await?;
     let (send, recv) = tokio::sync::oneshot::channel();
 
-    todo!("add report of the repos that do release, to check later if they have workflows and gh releases");
-
     rayon::spawn(move || {
         let distros: DashMap<String, usize> = DashMap::new();
         let repos: DashMap<String, usize> = DashMap::new();
         let has_external_repo = AtomicUsize::new(0);
-        let has_distro_repo = AtomicUsize::new(0);
+        let has_distro_repo = Mutex::new(Vec::new());
         let total = AtomicUsize::new(0);
         let errors = Mutex::new(Vec::new());
 
@@ -138,7 +136,7 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                 }
 
                 if !proj.dist_repos.is_empty() {
-                    has_distro_repo.fetch_add(1, Ordering::SeqCst);
+                    has_distro_repo.lock().unwrap().push(proj.name);
                 }
 
                 for repo in proj.repos {
@@ -154,9 +152,9 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
 
         send.send(Report {
             distros,
-            repos,
+            external_repos: repos,
             has_external_repos: has_external_repo.load(Ordering::SeqCst),
-            has_distro_repos: has_distro_repo.load(Ordering::SeqCst),
+            has_distro_repos: has_distro_repo.lock().unwrap().clone(),
             errors: errors.lock().unwrap().clone(),
             total: total.load(Ordering::SeqCst),
         })
@@ -170,6 +168,7 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
 
 #[derive(Debug, Clone)]
 struct Project {
+    pub name: String,
     pub repos: HashSet<String>,
     pub dist_repos: HashSet<String>,
 }
@@ -223,7 +222,12 @@ fn process_folder(path: &Path, build_effective: bool) -> color_eyre::Result<Proj
         }
     }
 
-    Ok(Project { repos, dist_repos })
+    let name = path.file_name().unwrap().to_string_lossy().to_string();
+    Ok(Project {
+        name,
+        repos,
+        dist_repos,
+    })
 }
 
 fn effective_pom(path: &Path) -> color_eyre::Result<Pom> {

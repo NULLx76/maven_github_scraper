@@ -7,6 +7,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::fs::File;
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -53,6 +54,8 @@ impl Repo {
     }
 }
 
+const SEED: [u8; 32] = [42; 32];
+
 #[derive(Subcommand)]
 enum Commands {
     /// Fetch all Java repos from Github and fetch all pom files of them (recursively)
@@ -68,6 +71,8 @@ enum Commands {
         #[arg(long)]
         effective: bool,
     },
+
+    /// creates an N large random subset of the data dir using a fixed seed of [42; 32]
     CreateRandomSubset {
         n: usize,
         from: PathBuf,
@@ -90,8 +95,6 @@ struct Cli {
     #[command(subcommand)]
     cmd: Commands,
 }
-
-const SEED: [u8; 32] = [42; 32];
 
 pub fn create_subset(n: usize, from: PathBuf, out: PathBuf) -> color_eyre::Result<()> {
     let mut rng = ChaCha20Rng::from_seed(SEED);
@@ -157,6 +160,8 @@ async fn main() -> color_eyre::Result<()> {
         Commands::Analyze { effective } => {
             let report = analyzer::analyze(data, effective).await?;
             report.print();
+            let output_file = File::create("./analyzer_output.json")?;
+            serde_json::to_writer(output_file, &report)?;
         }
         Commands::CreateRandomSubset { n, from, out } => {
             create_subset(n, from, out)?;
