@@ -73,12 +73,14 @@ enum Commands {
         from: PathBuf,
         out: PathBuf,
     },
+    /// Updates the has_pom field in the csv to correspond to the filesystem
+    ConsolidateCsv,
 }
 
 #[derive(Parser)]
 struct Cli {
     /// The data directory to analyze or download into
-    #[arg(short, long = "data", default_value = "../data/sample10_000")]
+    #[arg(short, long = "data", default_value = "./data/sample10_000")]
     data_dir: PathBuf,
 
     /// Github tokens to use when fetching from GitHub
@@ -102,7 +104,7 @@ pub fn create_subset(n: usize, from: PathBuf, out: PathBuf) -> color_eyre::Resul
 
     repos.truncate(n);
 
-    fs::create_dir_all(&out.join("poms"))?;
+    fs::create_dir_all(out.join("poms"))?;
 
     fs::copy(from.join("fetched"), out.join("fetched"))?;
 
@@ -149,6 +151,7 @@ async fn main() -> color_eyre::Result<()> {
         Commands::DownloadPoms => {
             let scraper = Scraper::new(cli.tokens, data.clone());
             scraper.download_files().await?;
+            data.update_csv_has_pom().await?;
         }
         Commands::Analyze { effective } => {
             let report = analyzer::analyze(data, effective).await?;
@@ -156,6 +159,9 @@ async fn main() -> color_eyre::Result<()> {
         }
         Commands::CreateRandomSubset { n, from, out } => {
             create_subset(n, from, out)?;
+        }
+        Commands::ConsolidateCsv => {
+            data.update_csv_has_pom().await?;
         }
     }
 
