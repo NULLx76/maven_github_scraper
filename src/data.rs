@@ -1,3 +1,4 @@
+use crate::analyzer::Report;
 use crate::{CsvRepo, Repo};
 use indicatif::ProgressBar;
 use rayon::iter::{ParallelBridge, ParallelIterator};
@@ -18,6 +19,7 @@ pub struct Data {
     pom_dir: PathBuf,
     github_csv: PathBuf,
     fetched: PathBuf,
+    report: PathBuf,
 
     state_cache: Arc<AtomicUsize>,
     state_path: PathBuf,
@@ -69,6 +71,7 @@ impl Data {
         Ok(Self {
             pom_dir: base_dir.join("poms"),
             github_csv: base_dir.join("github.csv"),
+            report: base_dir.join("report.json"),
             fetched,
             state_file_lock: Default::default(),
             state_path,
@@ -92,6 +95,20 @@ impl Data {
         f.write_all(bytes)?;
 
         Ok(())
+    }
+
+    /// Warning: this method blocks
+    pub fn write_report(&self, report: Report) -> Result<(), Error> {
+        let path = self.report.clone();
+        let file = File::create(path)?;
+        serde_json::to_writer(file, &report)?;
+        Ok(())
+    }
+
+    pub fn read_report(&self) -> Result<Report, Error> {
+        let file = File::open(&self.report)?;
+        let report = serde_json::from_reader(file)?;
+        Ok(report)
     }
 
     pub fn get_last_id(&self) -> Result<usize, Error> {

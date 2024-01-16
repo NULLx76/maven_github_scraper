@@ -1256,6 +1256,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "url",
  "walkdir",
 ]
 

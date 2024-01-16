@@ -71,6 +71,9 @@ enum Commands {
         effective: bool,
     },
 
+    /// Gets the most popular hostnames from a report.json
+    AnalyzeHostnames,
+
     /// creates an N large random subset of the data dir using a fixed seed of [42; 32]
     CreateRandomSubset {
         n: usize,
@@ -162,6 +165,9 @@ async fn main() -> color_eyre::Result<()> {
             report.print();
             let output_file = File::create("./analyzer_output.json")?;
             serde_json::to_writer(output_file, &report)?;
+        }
+        Commands::AnalyzeHostnames => {
+            analyzer::most_popular_hostnames(data)?;
         }
         Commands::CreateRandomSubset { n, from, out } => {
             create_subset(n, from, out)?;

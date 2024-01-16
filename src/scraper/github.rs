@@ -292,6 +292,7 @@ impl Github {
     }
 
     /// retry a github api request and rotate tokens to circumvent rate limiting
+    /// On reqwest errors does exponential backoff until 5 mins.
     async fn retry<F, Fu, R>(&self, fun: F) -> Result<R, Error>
     where
         F: Fn() -> Fu,
