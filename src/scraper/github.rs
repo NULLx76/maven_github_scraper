@@ -1,5 +1,6 @@
 use crate::data::Data;
 use crate::{data, Repo};
+use log::debug;
 use reqwest::{header, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -159,6 +160,7 @@ impl Github {
         } else {
             Cow::from(url)
         };
+        debug!("Sending request to {url}");
         self.client
             .request(method, url.as_ref())
             .header(header::AUTHORIZATION, format!("token {}", self.get_token()))
