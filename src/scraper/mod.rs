@@ -1,7 +1,6 @@
 use crate::data::Data;
-use crate::scraper::github::{Github, GithubTree};
-use crate::{data, CsvRepo, Repo};
-use std::cmp::Ordering;
+use crate::scraper::github::Github;
+use crate::{data, Repo};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
@@ -10,7 +9,6 @@ use thiserror::Error;
 use tokio::signal::ctrl_c;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
-use tracing::field::debug;
 use tracing::{debug, info, warn};
 
 pub mod github;
