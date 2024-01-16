@@ -5,13 +5,12 @@ use color_eyre::eyre::bail;
 use rand::prelude::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::fs::File;
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::time::Duration;
-use std::{fs, os};
 
 pub mod analyzer;
 mod data;

@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::future::Future;
 use std::io;
+use std::ops::Add;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use thiserror::Error;
@@ -296,10 +297,23 @@ impl Github {
         F: Fn() -> Fu,
         Fu: Future<Output = Result<R, Error>>,
     {
+        let mut backoff = Duration::from_secs(1);
         loop {
             match fun().await {
                 ok @ Ok(_) => return ok,
-                err @ Err(Error::Reqwest(_)) => return err,
+                Err(Error::Reqwest(reqwest_error)) => {
+                    warn!("Reqwest encountered error {reqwest_error:?}");
+                    warn!("Backing off for {} seconds", backoff.as_secs());
+                    sleep(backoff).await;
+
+                    backoff = backoff + backoff + Duration::from_millis(123); // Exponential backoff + jitter
+
+                    // After 5 minutes bail
+                    if backoff.as_secs() > 300 {
+                        error!("Failed sending request 5 times");
+                        return Err(Error::Reqwest(reqwest_error));
+                    }
+                }
                 Err(err @ Error::HttpError(_)) => return Err(err),
                 Err(Error::RateLimit(_)) => {
                     let mut wait = false;
@@ -321,6 +335,8 @@ impl Github {
                 }
                 err @ Err(_) => return err,
             }
+
+            // Yield
             yield_now().await
         }
     }

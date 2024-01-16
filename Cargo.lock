@@ -1246,7 +1246,6 @@ dependencies = [
  "dashmap",
  "dotenv",
  "indicatif",
- "log",
  "rand",
  "rand_chacha",
  "rayon",
