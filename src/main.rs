@@ -7,7 +7,6 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::fs::File;
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -163,8 +162,6 @@ async fn main() -> color_eyre::Result<()> {
         Commands::Analyze { effective } => {
             let report = analyzer::analyze(data, effective).await?;
             report.print();
-            let output_file = File::create("./analyzer_output.json")?;
-            serde_json::to_writer(output_file, &report)?;
         }
         Commands::AnalyzeHostnames => {
             analyzer::most_popular_hostnames(data)?;
