@@ -87,6 +87,7 @@ impl Scraper {
         let tree = match self.gh.tree(repo).await {
             Ok(el) => el,
             Err(github::Error::HttpError(code)) => {
+                self.data.mark_fetched(repo).await?;
                 warn!(
                     "HTTP Error occurred {code} while getting tree for {}",
                     repo.name
