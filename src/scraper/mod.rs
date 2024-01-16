@@ -10,7 +10,8 @@ use thiserror::Error;
 use tokio::signal::ctrl_c;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
-use tracing::{info, warn};
+use tracing::field::debug;
+use tracing::{debug, info, warn};
 
 pub mod github;
 
@@ -82,6 +83,7 @@ impl Scraper {
     }
 
     async fn fetch_all_files_for(&self, repo: &Repo, file: String) -> Result<bool, Error> {
+        debug!("Fetching files for {}", repo.name);
         let tree = match self.gh.tree(repo).await {
             Ok(el) => el,
             Err(github::Error::HttpError(code)) => {
