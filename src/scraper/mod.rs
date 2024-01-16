@@ -87,7 +87,10 @@ impl Scraper {
         let tree = match self.gh.tree(repo).await {
             Ok(el) => el,
             Err(github::Error::HttpError(code)) => {
-                warn!("HTTP Error occurred {code}");
+                warn!(
+                    "HTTP Error occurred {code} while getting tree for {}",
+                    repo.name
+                );
                 return Ok(false);
             }
             e @ Err(_) => e?,
@@ -111,8 +114,12 @@ impl Scraper {
         while let Some(res) = js.join_next().await {
             if let Err(e) = res.unwrap() {
                 match e {
-                    github::Error::HttpError(code) if code.as_u16() == 404 => {
-                        warn!("HTTP 404 occurred")
+                    github::Error::HttpError(code) => {
+                        warn!(
+                            "HTTP {} occurred while fetching files for {}",
+                            code.as_u16(),
+                            repo.name
+                        )
                     }
                     e => return Err(e.into()),
                 }
