@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::{fs, io};
 use thiserror::Error;
+use tracing::{error, info, trace};
+use url::Url;
 use walkdir::WalkDir;
 
 #[derive(Debug, Deserialize, PartialEq, Default)]
@@ -72,7 +74,7 @@ fn biggest_n(map: DashMap<String, usize>, n: usize) -> Vec<(String, usize)> {
     top
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Report {
     pub distros: DashMap<String, usize>,
     pub external_repos: DashMap<String, usize>,
@@ -108,6 +110,41 @@ impl Report {
     }
 }
 
+pub fn most_popular_hostnames(data: Data) -> Result<(), Error> {
+    let report = data.read_report()?;
+    let distro_hostnames = DashMap::new();
+    report.distros.par_iter().for_each(|entry| {
+        if let Ok(url) = Url::parse(entry.key()) {
+            if let Some(host) = url.host_str() {
+                distro_hostnames
+                    .entry(host.to_string())
+                    .and_modify(|el| *el += entry.value())
+                    .or_insert(*entry.value());
+            }
+        }
+    });
+
+    let external_repo_hostnames = DashMap::new();
+    report.external_repos.par_iter().for_each(|entry| {
+        if let Ok(url) = Url::parse(entry.key()) {
+            if let Some(host) = url.host_str() {
+                external_repo_hostnames
+                    .entry(host.to_string())
+                    .and_modify(|el| *el += entry.value())
+                    .or_insert(*entry.value());
+            }
+        }
+    });
+
+    let popular_distros = biggest_n(distro_hostnames, 15);
+    let popular_repos = biggest_n(external_repo_hostnames, 15);
+
+    println!("Most popular distribution repositories: {popular_distros:#?}");
+    println!("Most popular external repositoreis: {popular_repos:#?}");
+
+    Ok(())
+}
+
 pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error> {
     let projects = data.get_project_dirs().await?;
     let (send, recv) = tokio::sync::oneshot::channel();
@@ -135,7 +172,7 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                 }
 
                 if !proj.dist_repos.is_empty() {
-                    has_distro_repo.lock().unwrap().push(proj.name);
+                    has_distro_repo.lock().unwrap().push(proj.name.clone());
                 }
 
                 for repo in proj.repos {
@@ -146,18 +183,34 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                     distros.entry(repo).and_modify(|el| *el += 1).or_insert(1);
                 }
 
-                total.fetch_add(1, Ordering::SeqCst);
+                let total = total.fetch_add(1, Ordering::SeqCst) + 1;
+                if total > 0 && total % 2048 == 0 {
+                    info!("Progress: {total}, writing report");
+                    if let Err(err) = data.write_report(Report {
+                        distros: distros.clone(),
+                        external_repos: repos.clone(),
+                        has_external_repos: has_external_repo.load(Ordering::SeqCst),
+                        has_distro_repos: has_distro_repo.lock().unwrap().clone(),
+                        errors: errors.lock().unwrap().clone(),
+                        total,
+                    }) {
+                        error!("Error writing report occurred {err}")
+                    }
+                }
             });
 
-        send.send(Report {
+        let report = Report {
             distros,
             external_repos: repos,
             has_external_repos: has_external_repo.load(Ordering::SeqCst),
             has_distro_repos: has_distro_repo.lock().unwrap().clone(),
             errors: errors.lock().unwrap().clone(),
             total: total.load(Ordering::SeqCst),
-        })
-        .unwrap();
+        };
+
+        data.write_report(report.clone()).unwrap();
+
+        send.send(report).unwrap();
     });
 
     let data = recv.await.unwrap();
