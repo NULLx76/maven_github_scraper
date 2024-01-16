@@ -1,6 +1,5 @@
 use crate::data::Data;
 use crate::{data, Repo};
-use log::debug;
 use reqwest::{header, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -13,7 +12,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::task::yield_now;
 use tokio::time::sleep;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 static USER_AGENT: &str = "rust-repos (https://github.com/rust-ops/rust-repos)";
 
