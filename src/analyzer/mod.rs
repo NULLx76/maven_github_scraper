@@ -10,8 +10,10 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use std::{fs, io};
 use thiserror::Error;
+use tokio::time::Instant;
 use tracing::{error, info, trace};
 use url::Url;
 use walkdir::WalkDir;
@@ -184,7 +186,7 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                 }
 
                 let total = total.fetch_add(1, Ordering::SeqCst) + 1;
-                if total > 0 && total % 2048 == 0 {
+                if total > 0 && total % 1024 == 0 {
                     info!("Progress: {total}, writing report");
                     if let Err(err) = data.write_report(Report {
                         distros: distros.clone(),
@@ -285,6 +287,7 @@ fn process_folder(path: &Path, build_effective: bool) -> color_eyre::Result<Proj
 fn effective_pom(path: &Path) -> color_eyre::Result<Pom> {
     let cmd = Command::new("mvn")
         .args([
+            "-T1", // One thread as we don't want maven to interfere with our own multithreading
             "help:effective-pom",
             &format!("-Doutput={EFFECTIVE_FILE_NAME}"),
         ])
@@ -297,6 +300,7 @@ fn effective_pom(path: &Path) -> color_eyre::Result<Pom> {
     if cmd.success() {
         let f = File::open(path.join(EFFECTIVE_FILE_NAME))?;
         let pom = serde_xml_rs::from_reader(f)?;
+        info!("Created effective pom for {path:?}");
 
         Ok(pom)
     } else {
