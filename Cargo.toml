@@ -25,6 +25,8 @@ console-subscriber = "0.2"
 dotenv = "0.15"
 indicatif = "0.17.7"
 url = "2.5"
+itertools = "0.12.0"
+log = "0.4.20"
 
 [profile.release]
 lto = "fat"

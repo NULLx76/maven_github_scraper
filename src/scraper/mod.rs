@@ -1,6 +1,7 @@
 use crate::data::Data;
 use crate::scraper::github::Github;
 use crate::{data, Repo};
+use itertools::Itertools;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
@@ -52,8 +53,37 @@ impl Scraper {
         todo!("write to file somewhere")
     }
 
+    pub async fn download_all_workflows(&self) -> Result<usize, Error> {
+        let report = self.data.read_report()?;
+        let mut cnt = 0;
+        for repos in report
+            .has_distro_repos
+            .into_iter()
+            .tuples::<(_, _, _, _, _)>()
+        {
+            let mut js = JoinSet::new();
+            let repos: [String; 5] = repos.into();
+            for repo in repos {
+                let repo = Repo {
+                    id: String::default(),
+                    name: repo.replace('.', "/"),
+                };
+
+                let me = self.clone();
+                js.spawn(async move { me.fetch_workflow_files(&repo).await });
+            }
+
+            while let Some(next) = js.join_next().await {
+                if next.unwrap()? {
+                    cnt += 1;
+                }
+            }
+        }
+
+        Ok(cnt)
+    }
+
     async fn fetch_workflow_files(&self, repo: &Repo) -> Result<bool, Error> {
-        todo!("untested");
         let tree = self.gh.tree(repo).await?;
         let mut js = JoinSet::new();
 
@@ -67,6 +97,7 @@ impl Scraper {
             let gh = self.gh.clone();
             let repo = repo.clone();
 
+            info!("Downloading {:?}, {}", &repo, &f.path);
             js.spawn(async move { gh.download_file(&repo, &f.path).await });
         }
 
