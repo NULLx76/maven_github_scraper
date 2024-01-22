@@ -15,7 +15,7 @@ pub mod analyzer;
 mod data;
 pub mod scraper;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Repo {
     pub id: String,
     pub name: String,
@@ -81,6 +81,9 @@ enum Commands {
     },
     /// Updates the has_pom field in the csv to correspond to the filesystem
     ConsolidateCsv,
+
+    /// Fetch Workflows
+    FetchWorkflows,
 }
 
 #[derive(Parser)]
@@ -145,7 +148,6 @@ async fn main() -> color_eyre::Result<()> {
     if cli.tokens.is_empty() {
         bail!("Please provide Github Tokens");
     }
-    dbg!(&cli.tokens);
 
     let data = Data::new(cli.data_dir.as_path()).await?;
 
@@ -171,6 +173,11 @@ async fn main() -> color_eyre::Result<()> {
         }
         Commands::ConsolidateCsv => {
             data.update_csv_has_pom().await?;
+        }
+        Commands::FetchWorkflows => {
+            let scraper = Scraper::new(cli.tokens, data.clone());
+            let n = scraper.download_all_workflows().await?;
+            println!("Fetched {n} workflows");
         }
     }
 
