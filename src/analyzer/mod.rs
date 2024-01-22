@@ -138,11 +138,23 @@ pub fn most_popular_hostnames(data: Data) -> Result<(), Error> {
         }
     });
 
+    let gh_distor = *distro_hostnames
+        .get("maven.pkg.github.com")
+        .unwrap()
+        .value();
+    let gh_external = *external_repo_hostnames
+        .get("maven.pkg.github.com")
+        .unwrap()
+        .value();
+
     let popular_distros = biggest_n(distro_hostnames, 15);
     let popular_repos = biggest_n(external_repo_hostnames, 15);
 
     println!("Most popular distribution repositories: {popular_distros:#?}");
     println!("Most popular external repositoreis: {popular_repos:#?}");
+
+    println!("Github distro: {}", gh_distor);
+    println!("Github external: {}", gh_external);
 
     Ok(())
 }
