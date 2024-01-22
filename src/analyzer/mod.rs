@@ -108,7 +108,9 @@ impl Report {
             "Found {distros_len} distinct distribution repositories, top 25: {top_distros:#?}"
         );
 
-        fs::write("./analyzer_error_log", format!("{:#?}", self.errors)).unwrap();
+        println!("{} errors occurred", self.errors.len())
+
+        // fs::write("./analyzer_error_log", format!("{:#?}", self.errors)).unwrap();
     }
 }
 
@@ -150,6 +152,8 @@ pub fn most_popular_hostnames(data: Data) -> Result<(), Error> {
     let popular_distros = biggest_n(distro_hostnames, 15);
     let popular_repos = biggest_n(external_repo_hostnames, 15);
 
+    println!("For a total of {} repos", report.total);
+
     println!("Most popular distribution repositories: {popular_distros:#?}");
     println!("Most popular external repositoreis: {popular_repos:#?}");
 
@@ -171,7 +175,7 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
         let total = AtomicUsize::new(0);
         let errors = Mutex::new(Vec::new());
 
-        projects
+        let res: Vec<_> = projects
             .par_iter()
             .filter_map(|dir| match process_folder(dir, build_effective) {
                 Ok(project) => Some(project),
@@ -180,7 +184,9 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                     None
                 }
             })
-            .for_each(|proj| {
+            .map(|mut proj| {
+                proj.repos.remove("https://repo.maven.apache.org/maven2");
+
                 if !proj.repos.is_empty() {
                     has_external_repo.fetch_add(1, Ordering::SeqCst);
                 }
@@ -189,12 +195,18 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                     has_distro_repo.lock().unwrap().push(proj.name.clone());
                 }
 
-                for repo in proj.repos {
-                    repos.entry(repo).and_modify(|el| *el += 1).or_insert(1);
+                for repo in proj.repos.iter() {
+                    repos
+                        .entry(repo.clone())
+                        .and_modify(|el| *el += 1)
+                        .or_insert(1);
                 }
 
-                for repo in proj.dist_repos {
-                    distros.entry(repo).and_modify(|el| *el += 1).or_insert(1);
+                for repo in proj.dist_repos.iter() {
+                    distros
+                        .entry(repo.clone())
+                        .and_modify(|el| *el += 1)
+                        .or_insert(1);
                 }
 
                 let total = total.fetch_add(1, Ordering::SeqCst) + 1;
@@ -211,7 +223,10 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                         error!("Error writing report occurred {err}")
                     }
                 }
-            });
+
+                proj
+            })
+            .collect();
 
         let report = Report {
             distros,
@@ -224,6 +239,8 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
 
         data.write_report(report.clone()).unwrap();
 
+        data.write_projects(&res).unwrap();
+
         send.send(report).unwrap();
     });
 
@@ -232,8 +249,8 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
     Ok(data)
 }
 
-#[derive(Debug, Clone)]
-struct Project {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Project {
     pub name: String,
     pub repos: HashSet<String>,
     pub dist_repos: HashSet<String>,
@@ -270,7 +287,10 @@ fn process_folder(path: &Path, build_effective: bool) -> color_eyre::Result<Proj
                 }
             }
         } else {
-            pom.set_file_name("pom.xml");
+            pom.set_file_name("effective.xml");
+            if !pom.exists() {
+                pom.set_file_name("pom.xml");
+            }
             let f = File::open(pom)?;
             serde_xml_rs::from_reader(f)?
         };

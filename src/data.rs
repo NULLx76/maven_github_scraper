@@ -1,4 +1,4 @@
-use crate::analyzer::Report;
+use crate::analyzer::{Project, Report};
 use crate::{CsvRepo, Repo};
 use indicatif::ProgressBar;
 use rayon::iter::{ParallelBridge, ParallelIterator};
@@ -93,6 +93,15 @@ impl Data {
 
         let mut f = File::create(file_path)?;
         f.write_all(bytes)?;
+
+        Ok(())
+    }
+
+    pub fn write_projects(&self, projects: &[Project]) -> Result<(), Error> {
+        let mut path = self.report.clone();
+        path.set_file_name("projects.json");
+        let file = File::create(path)?;
+        serde_json::to_writer(file, projects)?;
 
         Ok(())
     }
