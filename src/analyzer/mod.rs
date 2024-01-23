@@ -185,6 +185,7 @@ pub async fn analyze(data: Data, build_effective: bool) -> Result<Report, Error>
                 }
             })
             .map(|mut proj| {
+                // Remove repo maven from external repos
                 proj.repos.remove("https://repo.maven.apache.org/maven2");
 
                 if !proj.repos.is_empty() {
