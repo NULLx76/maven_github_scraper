@@ -10,7 +10,7 @@ use thiserror::Error;
 use tokio::signal::ctrl_c;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub mod github;
 
@@ -74,8 +74,10 @@ impl Scraper {
             }
 
             while let Some(next) = js.join_next().await {
-                if next.unwrap()? {
-                    cnt += 1;
+                match next.unwrap() {
+                    Ok(true) => cnt += 1,
+                    Err(e) => error!("Error: {e:?}"),
+                    _ => {}
                 }
             }
         }
