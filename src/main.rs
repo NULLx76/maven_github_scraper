@@ -86,6 +86,9 @@ enum Commands {
 
     /// Fetch Workflows
     FetchWorkflows,
+
+    /// Distinct Repos per HostName
+    DistinctReposPerHostname,
 }
 
 #[derive(Parser)]
@@ -184,6 +187,10 @@ async fn main() -> color_eyre::Result<()> {
             let scraper = Scraper::new(cli.tokens, data.clone());
             let n = scraper.download_all_workflows().await?;
             println!("Fetched {n} workflows");
+        }
+        Commands::DistinctReposPerHostname => {
+            let report = data.read_report().unwrap();
+            analyzer::distinct_repos_per_hostname(report.external_repos);
         }
     }
 

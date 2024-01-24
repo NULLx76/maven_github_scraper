@@ -4,7 +4,7 @@ use color_eyre::eyre::{eyre, WrapErr};
 use dashmap::DashMap;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -84,6 +84,31 @@ pub struct Report {
     pub has_distro_repos: Vec<String>,
     pub errors: Vec<String>,
     pub total: usize,
+}
+
+pub fn distinct_repos_per_hostname(map: DashMap<String, usize>) {
+    // HashMap of HostName to HashSet
+    let dashmap: DashMap<_, HashSet<String>> = DashMap::new();
+
+    map.par_iter().for_each(|el| {
+        if let Ok(Some(val)) = Url::parse(el.key()).map(|el| el.host().map(|el| el.to_string())) {
+            dashmap
+                .entry(val)
+                .and_modify(|hs| {
+                    hs.insert(el.key().to_string());
+                })
+                .or_insert(HashSet::from([el.key().to_string()]));
+        }
+    });
+
+    let result: HashMap<_, usize> = dashmap
+        .par_iter()
+        .map(|el| (el.key().clone(), el.value().len()))
+        .collect();
+
+    let json = serde_json::to_string_pretty(&result).unwrap();
+
+    println!("{json}")
 }
 
 impl Report {

@@ -4,3 +4,4 @@ target/
 latest-data/
 data*/
 .env
+*.json
